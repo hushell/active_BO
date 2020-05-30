@@ -45,7 +45,7 @@ class ActiveSineData(Dataset):
     def __len__(self):
         return self.num_points
 
-    def inquery(self, x):
+    def inquiry(self, x):
         return self._func(x)
 
 

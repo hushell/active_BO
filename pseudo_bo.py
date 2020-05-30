@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from models import MLP
+from math import pi
 
 class PseudoBO(nn.Module):
 
@@ -13,8 +14,13 @@ class PseudoBO(nn.Module):
         self.net = MLP(x_dim, y_dim, h_dim)
         self.net.to(device)
 
-        self.w_list = self.grad_step()
+        # init w_list
+        self.grad_step()
+
+        # init D_0
         self.D = []
+        s = torch.zeros(1, 1).to(self.device)
+        self.D.append(s)
 
 
     def loss_inner(self, x):
@@ -31,25 +37,25 @@ class PseudoBO(nn.Module):
         """
         return (self.R(x) - self.forward(x)).pow(2).sum()
 
+
     def forward(self, x):
         return self.net.functional_forward(x, self.w_list)
 
+
     def grad_step(self, lr=0.1):
-        w_list = []
+        self.w_list = []
         for l in self.net.model.children():
             l_dict = {}
             for k, v in l.named_parameters():
                 if v.grad is None:
-                    l_dict[k] = v
+                    l_dict[k] = v # for init w_list
                 else:
                     l_dict[k] = v - lr * v.grad
-            w_list.append(l_dict)
-        return w_list
+            self.w_list.append(l_dict)
 
 
     def acquisition(self, n_steps, lr=0.1, debug=False):
-        s = torch.rand(1, 1).to(self.device).requires_grad_()
-        self.D.append(s)
+        s = torch.FloatTensor(1, 1).uniform_(-pi, pi).to(self.device).requires_grad_()
 
         optimizer = torch.optim.Adam([s], lr=lr, weight_decay=1e-6)
 
@@ -62,7 +68,7 @@ class PseudoBO(nn.Module):
             l_inn = self.loss_inner(s) # L(s, w(D_t))
             l_inn.backward() # w(D_t).grad
 
-            self.w_list = self.grad_step(lr) # w(s, D_t) = w(D_t) - lr * w(D_t).grad
+            self.grad_step(lr) # w(s, D_t) = w(D_t) - lr * w(D_t).grad
 
             optimizer.zero_grad() # zero out s.grad
             l_out = self.loss_outer(D_t) # L(D_t, w(s, D_t))

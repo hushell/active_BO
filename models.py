@@ -22,7 +22,7 @@ class MLP(nn.Module):
                 F.linear]
 
     def update_w(self, w_list):
-        for l, wd in zip(self.model.children, w_list):
+        for l, wd in zip(self.model.children(), w_list):
             for k, v in l.named_parameters():
                 assert(k in wd) # wd is a dict
                 with torch.no_grad():

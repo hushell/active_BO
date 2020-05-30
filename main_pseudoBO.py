@@ -7,7 +7,7 @@ from time import strftime
 from datasets import ActiveSineData
 from pseudo_bo import PseudoBO
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Get config file from command line arguments
 if len(sys.argv) != 2:
@@ -43,4 +43,4 @@ pbo = PseudoBO(dataset.inquery, x_dim=1, y_dim=1, h_dim=32, lr=0.1, device=devic
 # main loop
 for epoch in range(epochs):
     print("Epoch {}{}{}".format('-'*30, epoch, '-'*30))
-    pbo.acquisition(3)
+    pbo.acquisition(1, debug=True)

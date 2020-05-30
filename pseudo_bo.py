@@ -11,6 +11,7 @@ class PseudoBO(nn.Module):
         self.device = device
 
         self.net = MLP(x_dim, y_dim, h_dim)
+        self.net.to(device)
 
         self.w_list = self.grad_step()
         self.D = []
@@ -24,12 +25,14 @@ class PseudoBO(nn.Module):
         return (self.R(x) - self.net.forward(x)).pow(2).sum()
 
 
-    def loss_outer(self, x, w_list):
+    def loss_outer(self, x):
         """
         x.shape = (n, 1)
         """
-        return (R(x) - self.net.functional_forward(x, w_list)).pow(2).sum()
+        return (self.R(x) - self.forward(x)).pow(2).sum()
 
+    def forward(self, x):
+        return self.net.functional_forward(x, self.w_list)
 
     def grad_step(self, lr=0.1):
         w_list = []
@@ -46,6 +49,8 @@ class PseudoBO(nn.Module):
 
     def acquisition(self, n_steps, lr=0.1, debug=False):
         s = torch.rand(1, 1).to(self.device).requires_grad_()
+        self.D.append(s)
+
         optimizer = torch.optim.Adam([s], lr=lr, weight_decay=1e-6)
 
         D_t = torch.cat(self.D, dim=0)
@@ -60,7 +65,7 @@ class PseudoBO(nn.Module):
             self.w_list = self.grad_step(lr) # w(s, D_t) = w(D_t) - lr * w(D_t).grad
 
             optimizer.zero_grad() # zero out s.grad
-            l_out = self.loss_outer(D_t, self.w_list) # L(D_t, w(s, D_t))
+            l_out = self.loss_outer(D_t) # L(D_t, w(s, D_t))
             optimizer.step() # s = s - lr * s.grad
 
             if debug:

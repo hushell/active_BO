@@ -1,0 +1,8 @@
+{
+  "batch_size": 16,
+  "h_dim": 32,
+  "x_dim": 1,
+  "y_dim": 1,
+  "lr": 4e-5,
+  "epochs": 100
+}

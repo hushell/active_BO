@@ -4,18 +4,20 @@ import torch.nn.functional as F
 from models import MLP
 from math import pi
 
-class PseudoBO(nn.Module):
 
-    def __init__(self, R, x_dim=1, y_dim=1, h_dim=32, lr=0.1, device='cpu'):
+class PseudoBO(nn.Module):
+    def __init__(self, R, pretrained_net=None, x_dim=1, y_dim=1, h_dim=32, lr=0.1, bs=8, device='cpu'):
         super(PseudoBO, self).__init__()
         self.R = R
         self.device = device
+        self.inn_lr = lr
+        self.bs = bs
 
-        self.net = MLP(x_dim, y_dim, h_dim)
+        self.net = MLP(x_dim, y_dim, h_dim) if pretrained_net is None else pretrained_net
         self.net.to(device)
 
         # init w_list
-        self.grad_step()
+        self.inn_grad_step()
 
         # init D_0
         self.D = []
@@ -42,7 +44,7 @@ class PseudoBO(nn.Module):
         return self.net.functional_forward(x, self.w_list)
 
 
-    def grad_step(self, lr=0.1):
+    def inn_grad_step(self):
         self.w_list = []
         for l in self.net.model.children():
             l_dict = {}
@@ -50,28 +52,32 @@ class PseudoBO(nn.Module):
                 if v.grad is None:
                     l_dict[k] = v # for init w_list
                 else:
-                    l_dict[k] = v - lr * v.grad
+                    l_dict[k] = v - self.inn_lr * v.grad
             self.w_list.append(l_dict)
 
 
     def acquisition(self, n_steps, lr=0.1, debug=False):
+        # TODO:
+        # 1) batch s;
+        # 2) sample s_0 at high loss;
+        # 3) pretraining on D_0
         s = torch.FloatTensor(1, 1).uniform_(-pi, pi).to(self.device).requires_grad_()
 
-        optimizer = torch.optim.Adam([s], lr=lr, weight_decay=1e-6)
+        optimizer = torch.optim.Adam([s], lr=lr, weight_decay=1e-3)
 
         D_t = torch.cat(self.D, dim=0)
 
         for k in range(n_steps):
-            self.net.update_w(self.w_list) # w(D_t) = w_list
+            self.net.update_w(self.w_list) # w(D_t) = w_list to sync
 
             self.net.zero_grad()
             l_inn = self.loss_inner(s) # L(s, w(D_t))
-            l_inn.backward() # w(D_t).grad
-
-            self.grad_step(lr) # w(s, D_t) = w(D_t) - lr * w(D_t).grad
+            l_inn.backward(retain_graph=True) # w(D_t).grad
+            self.inn_grad_step() # w(s, D_t) = w(D_t) - inn_lr * w(D_t).grad
 
             optimizer.zero_grad() # zero out s.grad
             l_out = self.loss_outer(D_t) # L(D_t, w(s, D_t))
+            l_out.backward()
             optimizer.step() # s = s - lr * s.grad
 
             if debug:

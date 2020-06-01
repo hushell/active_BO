@@ -6,12 +6,14 @@ from math import pi
 
 
 class PseudoBO(nn.Module):
-    def __init__(self, R, pretrained_net=None, x_dim=1, y_dim=1, h_dim=32, lr=0.1, bs=8, device='cpu'):
+    def __init__(self, dataset, pretrained_net=None, x_dim=1, y_dim=1, h_dim=32,
+                 lr=0.1, bs=8, device='cpu', acq_scheme='rand'):
         super(PseudoBO, self).__init__()
-        self.R = R
+        self.R = dataset.inquiry
         self.device = device
         self.inn_lr = lr
         self.bs = bs
+        self.acq_scheme = acq_scheme
 
         self.net = MLP(x_dim, y_dim, h_dim) if pretrained_net is None else pretrained_net
         self.net.to(device)
@@ -21,7 +23,7 @@ class PseudoBO(nn.Module):
 
         # init D_0
         self.D = []
-        s = torch.zeros(1, 1).to(self.device)
+        s = dataset.data[0].to(self.device)
         self.D.append(s)
 
 
@@ -57,15 +59,16 @@ class PseudoBO(nn.Module):
 
 
     def acquisition(self, n_steps, lr=0.1, debug=False):
-        # TODO:
-        # [x] 1) batch s;
-        # 2) sample s_0 at high loss;
-        # [x] 3) pretraining on D_0 (better fitted)
-        s = torch.FloatTensor(self.bs, 1).uniform_(-pi, pi).to(self.device).requires_grad_()
+        D_t = torch.cat(self.D, dim=0)
+
+        if torch.rand(1) > 0.7:
+            s = torch.FloatTensor(self.bs, 1).uniform_(-pi, pi).to(self.device).requires_grad_()
+        else:
+            loss_D = (self.R(D_t) - self.forward(D_t)).pow(2).squeeze()
+            indices = torch.multinomial(loss_D, self.bs)
+            s = D_t[indices]
 
         optimizer = torch.optim.Adam([s], lr=lr, weight_decay=1e-3)
-
-        D_t = torch.cat(self.D, dim=0)
 
         for k in range(n_steps):
             self.net.update_w(self.w_list) # w(D_t) = w_list to sync
@@ -83,7 +86,7 @@ class PseudoBO(nn.Module):
             if debug:
                 print('Step %d: s = %.3f,  inn = %.3f,  out = %.3f' % (k, s, l_inn, l_out))
 
-        self.D.append(s)
+        self.D.append(s.detach())
 
 
 

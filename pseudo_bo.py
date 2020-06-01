@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from models import MLP
@@ -61,20 +62,24 @@ class PseudoBO(nn.Module):
     def acquisition(self, n_steps, lr=0.1, debug=False):
         D_t = torch.cat(self.D, dim=0)
 
-        if torch.rand(1) > 0.7:
-            s = torch.FloatTensor(self.bs, 1).uniform_(-pi, pi).to(self.device).requires_grad_()
-        else:
-            loss_D = (self.R(D_t) - self.forward(D_t)).pow(2).squeeze()
-            indices = torch.multinomial(loss_D, self.bs)
-            s = D_t[indices]
+        #if torch.rand(1) > 0.7:
+        #    s = torch.FloatTensor(self.bs, 1).uniform_(-pi, pi).to(self.device).requires_grad_()
+        #else:
+        #    loss_D = (self.R(D_t) - self.forward(D_t)).pow(2).squeeze()
+        #    indices = torch.multinomial(loss_D, self.bs)
+        #    s = D_t[indices]
 
+        s = torch.FloatTensor(1, 1).uniform_(-pi, pi).to(self.device).requires_grad_()
         optimizer = torch.optim.Adam([s], lr=lr, weight_decay=1e-3)
+
+        indices = np.random.randint(0, len(self.D), self.bs-1)
+        ss = torch.cat([s, D_t[indices]], dim=0)
 
         for k in range(n_steps):
             self.net.update_w(self.w_list) # w(D_t) = w_list to sync
 
             self.net.zero_grad()
-            l_inn = self.loss_inner(s) # L(s, w(D_t))
+            l_inn = self.loss_inner(ss) # L(s, w(D_t))
             l_inn.backward(retain_graph=True) # w(D_t).grad
             self.inn_grad_step() # w(s, D_t) = w(D_t) - inn_lr * w(D_t).grad
 

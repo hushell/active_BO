@@ -58,10 +58,10 @@ class PseudoBO(nn.Module):
 
     def acquisition(self, n_steps, lr=0.1, debug=False):
         # TODO:
-        # 1) batch s;
+        # [x] 1) batch s;
         # 2) sample s_0 at high loss;
-        # 3) pretraining on D_0
-        s = torch.FloatTensor(1, 1).uniform_(-pi, pi).to(self.device).requires_grad_()
+        # [x] 3) pretraining on D_0 (better fitted)
+        s = torch.FloatTensor(self.bs, 1).uniform_(-pi, pi).to(self.device).requires_grad_()
 
         optimizer = torch.optim.Adam([s], lr=lr, weight_decay=1e-3)
 
